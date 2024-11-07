@@ -45,6 +45,9 @@ def get_user_inputs():
     
     while True:
         substance = input("Enter the substance (e.g., Water, R-134a, Ammonia): ").strip().lower().replace(' ', '_').replace('-', '_')
+        if substance == 'r134a':
+                substance = 'r_134a'
+                break
         if substance not in valid_substances:
             print("Invalid substance. Please enter one of the following: Water, R-134a, Ammonia, Propane, or CO2.")
             continue
@@ -70,8 +73,10 @@ def get_user_inputs():
 def determine_table_to_access(substance, property_type):
     if property_type == "pressure":
         table_name = f"{substance}_pressure_table"
+        print(f"table to access: {table_name}")
     elif property_type == "temperature":
         table_name = f"{substance}_temp_table"
+        print(f"table to access: {table_name}")
     else:
         table_name = None
     return table_name
