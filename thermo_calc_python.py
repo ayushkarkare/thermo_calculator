@@ -14,11 +14,11 @@ try:
         # Read each sheet into a DataFrame
         df = pd.read_excel(xls, sheet_name=sheet_name)
         
-        # Clean and standardize column names
-        df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace(',', '')
+       # Standardize sheet names to have uniform format (e.g., water_temp_table)
+        standardized_sheet_name = sheet_name.lower().replace(' ', '_').replace('-', '_').replace('sat_', '').replace('r134a', 'r_134a')
         
-        # Store the processed DataFrame in a dictionary
-        data_dict[sheet_name.lower().replace(' ', '_').replace('-', '_')] = df
+        # Store the processed DataFrame in a dictionary with standardized sheet names
+        data_dict[standardized_sheet_name] = df
     
     # Save processed data to a pickle file for quick access
     with open(processed_data_file, 'wb') as f:
@@ -40,23 +40,41 @@ def load_processed_data():
 
 # Function to get user inputs
 def get_user_inputs():
-    substance = input("Enter the substance (e.g., Water, R-134a, Ammonia): ").strip()
-    property_type = input("Enter the property type you have (pressure or temperature): ").strip().lower()
-    property_value = float(input(f"Enter the value of {property_type}: "))
-    print(f"substance: {substance}, property type: {property_type}, property value: {property_value}")
+    valid_substances = ["water", "r134a", "ammonia", "co2", "propane"]
+    valid_property_types = ["pressure", "temperature"]
+    
+    while True:
+        substance = input("Enter the substance (e.g., Water, R-134a, Ammonia): ").strip().lower().replace(' ', '_').replace('-', '_')
+        if substance not in valid_substances:
+            print("Invalid substance. Please enter one of the following: Water, R-134a, Ammonia, Propane, or CO2.")
+            continue
+        break
+    
+    while True:
+        property_type = input("Enter the property type you have (pressure or temperature): ").strip().lower()
+        if property_type not in valid_property_types:
+            print("Invalid property type. Please enter either 'pressure' or 'temperature'.")
+            continue
+        break
+    
+    while True:
+        try:
+            property_value = float(input(f"Enter the value of {property_type}: "))
+            break
+        except ValueError:
+            print("Invalid value. Please enter a numeric value.")
+    
     return substance, property_type, property_value
 
 # Function to determine which table to access based on user inputs
 def determine_table_to_access(substance, property_type):
     if property_type == "pressure":
-        print(f"table to acces: sat_{substance}_pressure_table")
-        return f"sat_{substance}_pressure_table"
+        table_name = f"{substance}_pressure_table"
     elif property_type == "temperature":
-        print(f"table to access: Sat {substance}-Temp Table")
-        return f"sat_{substance}_temp_table"
+        table_name = f"{substance}_temp_table"
     else:
-        print(f"unsure of table to access")
-        return None
+        table_name = None
+    return table_name
 
 # Example usage
 # Load the preprocessed data
