@@ -208,45 +208,30 @@ def calculate_slvm_properties(row, quality):
 def determine_state_and_properties(row, second_property, second_value, data_dict):
     """
     Determine the state and calculate properties.
-    Now includes proper handling of temperature as second property for SHV determination.
+    Now handles both pressure and temperature table column formats.
     """
-    # For temperature as second property, compare with Tsat
-    if second_property == "temperature":
-        tsat = float(row['Temp. (C)'].iloc[0])
-        # Changed column name to match actual data
-        pressure = float(row['Press. (bar)'].iloc[0])
+    # Debug print to see actual values
+    print("\nDebug - Row values:")
+    for col in row.columns:
+        print(f"{col}: {row[col].iloc[0]}")
         
-        if second_value > tsat:
-            state = "Superheated Vapor"
-            details = f"Temperature ({second_value}°C) is greater than saturation temperature ({tsat}°C)"
-            
-            # Get SHV table
-            df_shv = data_dict.get('water_shv_table')
-            if df_shv is not None:
-                handle_superheated_vapor(df_shv, second_value, pressure)
-            else:
-                print("Error: Could not find superheated vapor table.")
-            properties = None
-            
-            return state, details, properties, second_value, pressure
-        elif second_value < tsat:
-            state = "Compressed Liquid"
-            details = f"Temperature ({second_value}°C) is less than saturation temperature ({tsat}°C)"
-            properties = None
-            print("\nWarning: Compressed liquid state detected. CL table lookup not yet implemented.")
-            return state, details, properties, second_value, pressure
-        else:
-            state = "Saturated"
-            details = f"Temperature ({second_value}°C) equals saturation temperature"
-            return state, details, None, second_value, pressure
-    
-    # For other properties, use the existing logic
-    property_columns = {
-        "specific_volume": ("Volume   (vf, m3/kg)", "Volume   (vg, m3/kg)"),
-        "internal_energy": ("Internal Energy    (uf, kJ/kg)", "Internal Energy   (ug, kJ/kg)"),
-        "enthalpy": ("Enthalpy    (hf, kJ/kg)", "Enthalpy   (hg, kJ/kg)"),
-        "entropy": ("Entropy   (sf, kJ/kg/K)", "Entropy   (sg, kJ/kg/K)")
-    }
+    # Dynamically determine which format we're using based on the columns present
+    if 'Internal Energy    (uf, kJ/kg)' in row.columns:
+        # Pressure table format
+        property_columns = {
+            "specific_volume": ("Volume   (vf, m3/kg)", "Volume   (vg, m3/kg)"),
+            "internal_energy": ("Internal Energy    (uf, kJ/kg)", "Internal Energy   (ug, kJ/kg)"),
+            "enthalpy": ("Enthalpy    (hf, kJ/kg)", "Enthalpy   (hg, kJ/kg)"),
+            "entropy": ("Entropy   (sf, kJ/kg/K)", "Entropy   (sg, kJ/kg/K)")
+        }
+    else:
+        # Temperature table format
+        property_columns = {
+            "specific_volume": ("Volume      (vf, m3/kg)", "Volume   (vg, m3/kg)"),
+            "internal_energy": ("Internal Energy (uf, kJ/kg)", "Internal Energy (ug, kJ/kg)"),
+            "enthalpy": ("Enthalpy    (hf, kJ/kg)", "Enthalpy (hg, kJ/kg)"),
+            "entropy": ("Entropy     (sf, kJ/kg/K)", "Entropy     (sg, kJ/kg/K)")
+        }
     
     try:
         if second_property in property_columns:
@@ -255,43 +240,48 @@ def determine_state_and_properties(row, second_property, second_value, data_dict
             g_value = float(row[g_col].iloc[0])
             
             temperature = float(row['Temp. (C)'].iloc[0])
-            pressure = float(row['Press. (bar)'].iloc[0])
+            pressure = float(row['Press.   (bar)'].iloc[0]) if 'Press.   (bar)' in row.columns else float(row['Press. (bar)'].iloc[0])
             
-            if second_value < f_value:
-                state = "Compressed Liquid"
-                details = f"Value ({second_value}) is less than saturated liquid value ({f_value})"
-                properties = None
-                print("\nWarning: Compressed liquid state detected. CL table lookup not yet implemented.")
-                
-            elif second_value > g_value:
+            print(f"\nDebug - Comparing {second_property} values:")
+            print(f"Input value: {second_value}")
+            print(f"Saturated liquid value (f): {f_value}")
+            print(f"Saturated vapor value (g): {g_value}")
+            
+            if second_value > g_value:
                 state = "Superheated Vapor"
                 details = f"Value ({second_value}) is greater than saturated vapor value ({g_value})"
                 
                 df_shv = data_dict.get('water_shv_table')
                 if df_shv is not None:
-                    handle_superheated_vapor(df_shv, temperature, pressure)
+                    properties = handle_superheated_vapor(df_shv, temperature, pressure)
                 else:
                     print("Error: Could not find superheated vapor table.")
+                    properties = None
+                    
+            elif second_value < f_value:
+                state = "Compressed Liquid"
+                details = f"Value ({second_value}) is less than saturated liquid value ({f_value})"
                 properties = None
+                print("\nWarning: Compressed liquid state detected. CL table lookup not yet implemented.")
                 
             elif abs(second_value - f_value) < 1e-6:
                 state = "Saturated Liquid"
                 details = f"Value ({second_value}) equals saturated liquid value ({f_value})"
                 properties = {
-                    'Volume': float(row[f_col].iloc[0]),
-                    'Internal Energy': float(row['Internal Energy    (uf, kJ/kg)'].iloc[0]),
-                    'Enthalpy': float(row['Enthalpy    (hf, kJ/kg)'].iloc[0]),
-                    'Entropy': float(row['Entropy   (sf, kJ/kg/K)'].iloc[0])
+                    'Volume': float(row[property_columns['specific_volume'][0]].iloc[0]),
+                    'Internal Energy': float(row[property_columns['internal_energy'][0]].iloc[0]),
+                    'Enthalpy': float(row[property_columns['enthalpy'][0]].iloc[0]),
+                    'Entropy': float(row[property_columns['entropy'][0]].iloc[0])
                 }
                 
             elif abs(second_value - g_value) < 1e-6:
                 state = "Saturated Vapor"
                 details = f"Value ({second_value}) equals saturated vapor value ({g_value})"
                 properties = {
-                    'Volume': float(row[g_col].iloc[0]),
-                    'Internal Energy': float(row['Internal Energy   (ug, kJ/kg)'].iloc[0]),
-                    'Enthalpy': float(row['Enthalpy   (hg, kJ/kg)'].iloc[0]),
-                    'Entropy': float(row['Entropy   (sg, kJ/kg/K)'].iloc[0])
+                    'Volume': float(row[property_columns['specific_volume'][1]].iloc[0]),
+                    'Internal Energy': float(row[property_columns['internal_energy'][1]].iloc[0]),
+                    'Enthalpy': float(row[property_columns['enthalpy'][1]].iloc[0]),
+                    'Entropy': float(row[property_columns['entropy'][1]].iloc[0])
                 }
                 
             else:
@@ -306,7 +296,6 @@ def determine_state_and_properties(row, second_property, second_value, data_dict
             
     except Exception as e:
         print(f"\nError in state determination: {e}")
-        # Print the actual column names for debugging
         print("Available columns:", row.columns.tolist())
         return None, None, None, None, None
 
